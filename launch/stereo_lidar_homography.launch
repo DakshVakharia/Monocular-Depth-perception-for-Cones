@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- H fitted offline from stereo/LiDAR cone positions matched to pixels (fit your own with your camera; see README). -->
+    <arg name="bag_file"  default="path/to/your.bag" />
+    <arg name="play_bag"  default="true" />
+    <arg name="bag_start" default="0" />
+    <arg name="h_yaml"    default="$(find homographic_mono_cam_depth_perception)/scripts/data/homography_stereo_lidar.yaml" />
+    <arg name="bag_rate"  default="1.0" />
+    <arg name="tilt_correction"    default="false" />
+    <arg name="fx" default="0" />
+    <arg name="fy" default="0" />
+    <arg name="cx" default="0" />
+    <arg name="cy" default="0" />
+    <arg name="image_topic" default="/camera/image/compressed" />
+    <arg name="imu_topic"   default="/camera/imu" />
+    <arg name="bbox_topic"  default="/cone_detections" />
+    <arg name="odom_topic"  default="/odom" />
+    <arg name="show_image_overlay" default="true" />
+    <arg name="show_track_map"     default="true" />
+    <arg name="record_bev"         default="" />
+    <arg name="record_overlay"     default="" />
+    <arg name="record_seconds"     default="0" />
+
+    <include file="$(find homographic_mono_cam_depth_perception)/launch/pipeline.launch" pass_all_args="true">
+        <arg name="h_yaml" value="$(arg h_yaml)" />
+    </include>
+</launch>

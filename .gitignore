@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+*.mp4
+*.bag
+build/
+devel/

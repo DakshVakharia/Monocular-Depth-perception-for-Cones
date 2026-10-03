@@ -1,0 +1,105 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- Shared pipeline. Use stereo_lidar_homography.launch or
+         aruco_homography.launch instead of launching this file directly. -->
+    <arg name="h_yaml" />
+    <arg name="tilt_correction" default="false" />  <!-- true requires fx/fy/cx/cy -->
+    <!-- Camera intrinsics from YOUR calibration (only used for tilt correction) -->
+    <arg name="fx" default="0" />
+    <arg name="fy" default="0" />
+    <arg name="cx" default="0" />
+    <arg name="cy" default="0" />
+    <!-- Input topics: remap to whatever your stack publishes -->
+    <arg name="image_topic" default="/camera/image/compressed" />
+    <arg name="imu_topic"   default="/camera/imu" />
+    <arg name="bbox_topic"  default="/cone_detections" />
+    <arg name="odom_topic"  default="/odom" />
+    <arg name="play_bag"   default="true" />
+    <arg name="bag_file"   default="path/to/your.bag" />
+    <arg name="bag_start"  default="0" />
+    <arg name="bag_rate"   default="1.0" />
+    <arg name="show_image_overlay" default="true" />
+    <arg name="show_track_map"     default="true" />
+    <arg name="record_bev"         default="" />  <!-- e.g. /tmp/bev.mp4 -->
+    <arg name="record_overlay"     default="" />
+    <arg name="record_seconds"     default="0" />  <!-- >0: finalise overlay video after N s -->
+
+    <param name="use_sim_time" value="$(arg play_bag)" />
+
+    <!-- 0. H publisher: publishes base H (latched), optionally corrected for
+         camera tilt from the camera IMU: H = H_base * K * R_cam * K^-1 -->
+    <node name="h_matrix_publisher" pkg="homographic_mono_cam_depth_perception"
+          type="h_matrix_publisher_node" output="screen" required="true">
+        <param name="h_matrix_path"          value="$(arg h_yaml)" />
+        <param name="enable_tilt_correction" value="$(arg tilt_correction)" />
+        <param name="imu_topic"             value="$(arg imu_topic)" />
+        <param name="publish_topic"         value="/homography_matrix" />
+        <param name="fx"                    value="$(arg fx)" />
+        <param name="fy"                    value="$(arg fy)" />
+        <param name="cx"                    value="$(arg cx)" />
+        <param name="cy"                    value="$(arg cy)" />
+        <param name="change_threshold_deg"  value="0.2" />
+    </node>
+
+    <!-- 1. Cone base detector -->
+    <node name="cone_base_detector" pkg="homographic_mono_cam_depth_perception"
+          type="cone_base_detector_node" output="screen">
+        <param name="y_offset_pixels" value="5.0" />
+        <param name="subscribe_topic" value="$(arg bbox_topic)" />
+        <param name="publish_topic"   value="/cone_bases" />
+    </node>
+
+    <!-- 2. Cone ground projector — picks up every H update automatically -->
+    <node name="cone_ground_projector" pkg="homographic_mono_cam_depth_perception"
+          type="cone_ground_projector_node" output="screen">
+        <param name="hmatrix_topic"   value="/homography_matrix" />
+        <param name="subscribe_topic" value="/cone_bases" />
+        <param name="publish_topic"   value="/projected_cones" />
+        <param name="yaml_path"       value="$(arg h_yaml)" />
+        <param name="max_distance"    value="40.0" />
+    </node>
+
+    <!-- 3. BEV visualizer -->
+    <node name="bev_cone_visualizer" pkg="homographic_mono_cam_depth_perception"
+          type="bev_cone_visualizer_node" output="screen">
+        <param name="canvas_width"     value="800" />
+        <param name="canvas_height"    value="800" />
+        <param name="pixels_per_meter" value="40.0" />
+        <param name="subscribe_topic"  value="/projected_cones" />
+        <param name="record_path"      value="$(arg record_bev)" />
+    </node>
+
+    <!-- 4. Image-plane overlay: side-by-side camera + BEV -->
+    <node if="$(arg show_image_overlay)" name="standalone_cone_visualizer" pkg="homographic_mono_cam_depth_perception"
+          type="standalone_cone_visualizer_node" output="screen">
+        <param name="image_topic"      value="$(arg image_topic)" />
+        <param name="bbox_topic"       value="$(arg bbox_topic)" />
+        <param name="subscribe_topic"  value="/projected_cones" />
+        <param name="image_width"      value="960" />
+        <param name="image_height"     value="540" />
+        <param name="bev_size"         value="540" />
+        <param name="pixels_per_meter" value="20.0" />
+        <param name="record_path"      value="$(arg record_overlay)" />
+        <param name="record_seconds"   value="$(arg record_seconds)" />
+    </node>
+
+    <!-- 5. Track map visualizer -->
+    <node if="$(arg show_track_map)" name="track_map_visualizer" pkg="homographic_mono_cam_depth_perception"
+          type="track_map_visualizer_node" output="screen">
+        <param name="canvas_width"     value="1200" />
+        <param name="canvas_height"    value="1200" />
+        <param name="pixels_per_meter" value="15.4" />
+        <param name="merge_radius"     value="1.5" />
+        <param name="min_range"        value="1.0" />
+        <param name="max_range"        value="12.0" />
+        <param name="min_hits"         value="3" />
+        <param name="camera_offset_x"  value="0.0" />
+        <param name="camera_offset_y"  value="0.0" />
+        <param name="cone_topic"       value="/projected_cones" />
+        <param name="odom_topic"       value="$(arg odom_topic)" />
+    </node>
+
+    <!-- 6. Rosbag -->
+    <node if="$(arg play_bag)" pkg="rosbag" type="play" name="player"
+          args="--clock -s $(arg bag_start) -r $(arg bag_rate) $(arg bag_file)" output="screen" />
+</launch>
